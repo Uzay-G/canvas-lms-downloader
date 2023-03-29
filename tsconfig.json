@@ -1,7 +1,7 @@
 {
     "compilerOptions": {
-        "module": "commonjs",
-        "outDir": "build",
+        "module": "nodenext",
+        "outDir": "lib",
         "sourceMap": true,
         "esModuleInterop":true
     },

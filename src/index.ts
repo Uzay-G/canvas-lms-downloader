@@ -1,11 +1,13 @@
-import * as request from 'superagent';
-import * as fs from 'fs-extra';
-import * as path from 'path';
-import commander from 'commander';
+import request from 'superagent';
+import fs from 'fs-extra';
+import path from 'path';
+import { program } from 'commander';
 import filenamify from "filenamify";
 import lodash from 'lodash';
 
-commander
+
+
+program
   .option('-c --course [course]', "Course to download (name or code)", String)
   .option('-a --all [all]', 'Get all courses', Boolean)
   .option('-d --dir <to>', 'Location to download to', String)
@@ -15,17 +17,19 @@ commander
 
 function commanderFail(message: string) {
   if (message) console.error(message);
-  commander.help()
+  program.help()
 }
 
-if (commander.course && commander.all) {
+const options = program.opts();
+
+if (options.course && options.all) {
   commanderFail("Specify either --course or --all, not both");
 }
-if (!commander.course && !commander.all) {
+if (!options.course && !options.all) {
   commanderFail("Must specify either --course or --all");
 }
 for (const key of ['dir', 'url', 'token']) {
-  if (!commander[key]) {
+  if (!options[key]) {
     commanderFail(`Must specify ${key}`);
   }
 }
@@ -109,7 +113,7 @@ async function getJson(url: string, query = {}) {
   query = {per_page:PAGE_SIZE, ...query};
   const response = await request
     .get(url)
-    .set('Authorization', `Bearer ${commander.token}`)
+    .set('Authorization', `Bearer ${options.token}`)
     .set("Accept", 'application/json')
     .query(query)
     .catch(e => {
@@ -120,11 +124,11 @@ async function getJson(url: string, query = {}) {
 
 async function downloadFiles(c: Course, courseDir: string) {
   // files are flat, folders data needed to replicate canvas folder structure
-  const folders = await getJson(`${commander.url}/courses/${c.id}/folders`) as Folder[];
+  const folders = await getJson(`${options.url}/courses/${c.id}/folders`) as Folder[];
   if (!folders) return;
 
   // get list of files from canvas
-  const files = await getJson(`${commander.url}/courses/${c.id}/files`) as File[];
+  const files = await getJson(`${options.url}/courses/${c.id}/files`) as File[];
   if (!files) return;
 
   // sort by date with most recently modified first
@@ -145,7 +149,7 @@ async function downloadFiles(c: Course, courseDir: string) {
         stream.on('finish',resolve);
         stream.on('error', reject)
         request.get(file.url)
-          .set('Authorization', `Bearer ${commander.token}`)
+          .set('Authorization', `Bearer ${options.token}`)
           .pipe(stream);
       }),
       destPath,
@@ -155,7 +159,7 @@ async function downloadFiles(c: Course, courseDir: string) {
 }
 async function downloadModules(c: Course, courseDir: string) {
   // files are flat, folders data needed to replicate canvas folder structure
-  const modules = await getJson(`${commander.url}/courses/${c.id}/modules`) as Module[];
+  const modules = await getJson(`${options.url}/courses/${c.id}/modules`) as Module[];
   for (let module of modules){
 
     const canvasFoldername = `modules/${module.name}`//folders.find(f => f.id === file.folder_id).full_name;
@@ -165,6 +169,9 @@ async function downloadModules(c: Course, courseDir: string) {
 
     const items = await getJson(module.items_url) as ModuleItem[];
     for (let item of items){
+
+      if (!item.url) continue; 
+
       // this can be any of a number of different interfaces.
       // it might contain a download link for a file which is not available under the /files api
       const thing = await getJson(item.url)
@@ -179,7 +186,7 @@ async function downloadModules(c: Course, courseDir: string) {
           stream.on('finish', resolve);
           stream.on('error', reject)
           request.get(thing.url)
-            .set('Authorization', `Bearer ${commander.token}`)
+            .set('Authorization', `Bearer ${options.token}`)
             .pipe(stream);
         }),
         destPath,
@@ -191,14 +198,14 @@ async function downloadModules(c: Course, courseDir: string) {
 
 
 async function downloadPages(c: Course, courseDir: string) {
-  const pages = await getJson(`${commander.url}/courses/${c.id}/pages`) as Page[];
+  const pages = await getJson(`${options.url}/courses/${c.id}/pages`) as Page[];
   if (!pages) return;
   const pagesDir = path.resolve(courseDir, 'pages');
   await fs.mkdirp(pagesDir);
   for (const page of pages) {
     const destPath = path.resolve(pagesDir, santizeFilename(page.url) + ".html");
     await fIfNeeded(async ()=>{
-      const r = await request.get(`${commander.url}/courses/${c.id}/pages/${page.url}`).query({ per_page: PAGE_SIZE }).set("Authorization", `Bearer ${commander.token}`);
+      const r = await request.get(`${options.url}/courses/${c.id}/pages/${page.url}`).query({ per_page: PAGE_SIZE }).set("Authorization", `Bearer ${options.token}`);
       const pageData = r.body;
       await fs.writeFile(destPath, pageData.body)},
       destPath,
@@ -207,7 +214,7 @@ async function downloadPages(c: Course, courseDir: string) {
   }
 }
 async function downloadAnnouncements(c: Course, courseDir: string) {
-  const announcements = await getJson(`${commander.url}/announcements`, { 'context_codes[]': `course_${c.id}` }) as Announcement[];
+  const announcements = await getJson(`${options.url}/announcements`, { 'context_codes[]': `course_${c.id}` }) as Announcement[];
   if (!announcements) return;
   const announcementsDir = path.resolve(courseDir, 'announcements');
   await fs.mkdirp(announcementsDir)
@@ -220,10 +227,10 @@ async function downloadAnnouncements(c: Course, courseDir: string) {
 
 async function run() {
 
-  const courseName = commander.course;
-  const targetFolder = commander.dir;
+  const courseName = options.course;
+  const targetFolder = options.dir;
 
-  const courses = await getJson(`${commander.url}/courses`, {per_page:PAGE_SIZE}) as Course[];
+  const courses = await getJson(`${options.url}/courses`, {per_page:PAGE_SIZE}) as Course[];
   if (!courses) return;
   const coursesToProcess = courseName ? courses.filter(a => a.name === courseName || a.course_code === courseName) : courses;
   if (!coursesToProcess) {

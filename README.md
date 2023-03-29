@@ -14,7 +14,7 @@ i update this whenever the script doesn't get all the things i want for a course
 git clone https://github.com/Ysgorg/canvas-lms-downloader.git
 
 # install dependencies and build
-cd canvas-lms-downloader && npm ci && npm run build
+cd canvas-lms-downloader && yarn && yarn build
 ```
 
 ## Usage
@@ -28,8 +28,10 @@ CANVAS_URL="https://canvas.vu.nl/api/v1/"
 LOCAL_DATA_DIR="~/canvas" # where you want the downloaded data
 
 # download for a specific course
-npm start -- --token "${CANVAS_TOKEN}" --url "${CANVAS_URL}" --dir $LOCAL_DATA_DIR --course "Software Testing"
+node lib/index.js --token "${CANVAS_TOKEN}" --url "${CANVAS_URL}" --dir $LOCAL_DATA_DIR --course "Software Testing"
 
 # download for all courses
-npm start -- --token "${CANVAS_TOKEN}" --url "${CANVAS_URL}" --dir $LOCAL_DATA_DIR --all
+node lib/index.js --token "${CANVAS_TOKEN}" --url "${CANVAS_URL}" --dir $LOCAL_DATA_DIR --all
 ```
+
+Env vars can optionally be set using `direnv`. 
