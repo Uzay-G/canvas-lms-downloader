@@ -241,6 +241,11 @@ async function run() {
   await fs.mkdirp(targetFolder);
 
   for (const c of coursesToProcess) {
+    
+    if (!c.name){
+      console.info("No course name, skipping. Data:", JSON.stringify(c));
+      continue;
+    }
 
     console.info(`\n> Downloading from ${c.course_code} ${c.name}`);
 
