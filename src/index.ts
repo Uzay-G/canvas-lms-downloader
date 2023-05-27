@@ -4,8 +4,9 @@ import path from 'path';
 import { program } from 'commander';
 import filenamify from "filenamify";
 import lodash from 'lodash';
+import jsdom from 'jsdom';
 
-
+const { JSDOM } = jsdom;
 
 program
   .option('-c --course [course]', "Course to download (name or code)", String)
@@ -197,6 +198,45 @@ async function downloadModules(c: Course, courseDir: string) {
 }
 
 
+async function downloadAssignments(c: Course, courseDir: string) {
+  // load files stored in assignment bodies
+  // files are flat, folders data needed to replicate canvas folder structure
+  const assignments = await getJson(`${options.url}/courses/${c.id}/assignments`);
+  const folder = path.resolve(courseDir, "psets/");
+  await fs.mkdirs(folder)
+  for (let assign of assignments){
+	// match <a> link name and url from html desc using regex
+	let links = (new JSDOM("<!DOCTYPE html>" + assign.description)).window.document.querySelectorAll("a");
+	links.forEach(async (link) => {
+      let href = link.getAttribute("data-api-endpoint");
+      if (!href) return
+
+      // this can be any of a number of different interfaces.
+      // it might contain a download link for a file which is not available under the /files api
+      const thing = await getJson(href)
+
+      if (!thing.url) return
+
+      const destPath = path.resolve(folder, link.textContent);
+
+
+      await fIfNeeded(
+        ()=>new Promise((resolve, reject) => {
+          var stream = fs.createWriteStream(destPath);
+          stream.on('finish', resolve);
+          stream.on('error', reject)
+          request.get(thing.url)
+            .set('Authorization', `Bearer ${options.token}`)
+            .pipe(stream);
+        }),
+        destPath,
+        new Date(thing.modified_at)
+      )
+    })
+  }
+}
+
+
 async function downloadPages(c: Course, courseDir: string) {
   const pages = await getJson(`${options.url}/courses/${c.id}/pages`) as Page[];
   if (!pages) return;
@@ -252,6 +292,7 @@ async function run() {
     const courseDir = path.resolve(targetFolder, santizeFilename(c.name)+"_"+c.id);
     await fs.mkdirp(courseDir);
 
+    await downloadAssignments(c, courseDir).catch(console.error);
     await downloadFiles(c, courseDir).catch(console.error);
     await downloadPages(c, courseDir).catch(console.error);
     await downloadAnnouncements(c, courseDir).catch(console.error);
